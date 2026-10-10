@@ -31,3 +31,18 @@ export interface WaferLayoutResponse extends WaferLayoutRequest {
   total_valid_shots: number;
   shots: WaferShot[];
 }
+
+export interface WaferMapPredictionRequest {
+  wafer_map: number[][];
+}
+
+export interface ClassProbability {
+  class_name: string;
+  probability: number;
+}
+
+export interface WaferMapPredictionResponse {
+  predicted_class: string;
+  confidence: number;
+  class_probabilities: ClassProbability[];
+}

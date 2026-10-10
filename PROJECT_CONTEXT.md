@@ -14,6 +14,17 @@ Baseline CNN:
 The model is already trained, the .pth file with weights is in ./models/plain_cnn_classifier_v1.pth
 the notebook used for training and evaluation is in ./notebooks/EDA+baseline_CNN.ipynb, use this for of any 
 CNN architecture, preprocessing, resizing of wafer maps, and class mapping should be referenced from this notebook, the CNN takes (26,26) wafer maps as input, so all custom wafer maps from application must be resized accordingly before inference and the labels to classes matching also given in notebook
+The integrated inference path mirrors the notebook's CNN architecture and
+preprocessing: categorical states are resized to 26x26 with nearest-neighbor
+interpolation, one-hot encoded to three channels, and passed to the model in
+NCHW order. The response reports softmax probabilities in the notebook's
+training order: Center, Donut, Edge-Loc, Edge-Ring, Loc, Near-full, Random,
+Scratch, none.
+
+For the current UI, each selectable UCS shot is treated as one classifier map
+cell. The square input is padded with background cells; valid unmarked shots
+are state 1 and marked failing shots are state 2. Individual-die interaction
+and die-size configuration remain future work.
 Current objective is application integration, not model improvement.
 
 ## Reference Repository

@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.inference import router as inference_router
 from app.api.routes.wafers import router as wafers_router
 from app.schemas.health import HealthResponse
 
@@ -12,6 +13,7 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 app.include_router(wafers_router)
+app.include_router(inference_router)
 
 
 @app.get("/api/health", response_model=HealthResponse)

@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useState, type FormEvent } from "react";
+import { useCallback, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { WaferMap } from "@/components/WaferMap";
-import { createWaferLayout } from "@/lib/api";
+import { createWaferLayout, predictWaferMap } from "@/lib/api";
+import { buildWaferMap } from "@/lib/wafer-map";
 import type {
   NotchOrientation,
   WaferLayoutRequest,
   WaferLayoutResponse,
+  WaferMapPredictionResponse,
   WaferShot,
 } from "@/types/wafer";
 
@@ -42,12 +44,24 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
+function formatPercent(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "percent",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
 export default function Home() {
   const [configuration, setConfiguration] = useState(DEFAULT_CONFIGURATION);
   const [layout, setLayout] = useState<WaferLayoutResponse | null>(null);
   const [failingShots, setFailingShots] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isPredicting, setIsPredicting] = useState(false);
+  const [prediction, setPrediction] =
+    useState<WaferMapPredictionResponse | null>(null);
+  const [inferenceError, setInferenceError] = useState<string | null>(null);
+  const predictionRequestId = useRef(0);
 
   const loadLayout = useCallback(async (request: WaferLayoutRequest) => {
     setIsLoading(true);
@@ -56,6 +70,10 @@ export default function Home() {
       const nextLayout = await createWaferLayout(request);
       setLayout(nextLayout);
       setFailingShots(new Set());
+      predictionRequestId.current += 1;
+      setIsPredicting(false);
+      setPrediction(null);
+      setInferenceError(null);
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -76,6 +94,10 @@ export default function Home() {
 
   function toggleShot(shot: WaferShot) {
     const key = shotKey(shot);
+    predictionRequestId.current += 1;
+    setIsPredicting(false);
+    setPrediction(null);
+    setInferenceError(null);
     setFailingShots((current) => {
       const next = new Set(current);
       if (next.has(key)) {
@@ -85,6 +107,36 @@ export default function Home() {
       }
       return next;
     });
+  }
+
+  async function classifyWafer() {
+    if (!layout || layout.shots.length === 0) {
+      return;
+    }
+
+    const requestId = ++predictionRequestId.current;
+    setIsPredicting(true);
+    setInferenceError(null);
+    try {
+      const waferMap = buildWaferMap(layout, failingShots);
+      const result = await predictWaferMap({ wafer_map: waferMap });
+      if (predictionRequestId.current === requestId) {
+        setPrediction(result);
+      }
+    } catch (requestError) {
+      if (predictionRequestId.current === requestId) {
+        setPrediction(null);
+        setInferenceError(
+          requestError instanceof Error
+            ? requestError.message
+            : "An unexpected error occurred during wafer classification.",
+        );
+      }
+    } finally {
+      if (predictionRequestId.current === requestId) {
+        setIsPredicting(false);
+      }
+    }
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -104,7 +156,7 @@ export default function Home() {
         <div className="topbar-meta">
           <span className="status-dot" />
           <span>LAYOUT WORKSPACE</span>
-          <span className="phase-tag">PHASE 01</span>
+          <span className="phase-tag">PHASE 02</span>
         </div>
       </header>
 
@@ -231,6 +283,77 @@ export default function Home() {
               </span>
             </div>
           )}
+          {layout && (
+            <section className="classification-panel" aria-label="Wafer classification">
+              <div className="classification-heading">
+                <div>
+                  <p className="eyebrow">03 / CNN CLASSIFICATION</p>
+                  <h3>Defect pattern</h3>
+                </div>
+                <span className="classification-input-note">
+                  CATEGORICAL MAP → 26 × 26
+                </span>
+              </div>
+              <p className="classification-description">
+                Classify the current shot pattern. Valid unmarked shots are
+                passing (1), marked shots are failing (2), and wafer-background
+                cells are 0.
+              </p>
+              <button
+                className="primary-button classify-button"
+                type="button"
+                onClick={() => void classifyWafer()}
+                disabled={isPredicting || layout.shots.length === 0}
+              >
+                <span>
+                  {isPredicting ? "Classifying wafer…" : "Classify wafer map"}
+                </span>
+                <span aria-hidden="true">↗</span>
+              </button>
+              {inferenceError && (
+                <div className="error-message" role="alert">
+                  <strong>Classification unavailable</strong>
+                  <span>{inferenceError}</span>
+                </div>
+              )}
+              {prediction && (
+                <div className="prediction-result" aria-live="polite">
+                  <div className="prediction-summary">
+                    <div>
+                      <span>PREDICTED PATTERN</span>
+                      <strong>{prediction.predicted_class}</strong>
+                    </div>
+                    <div>
+                      <span>CONFIDENCE</span>
+                      <strong>{formatPercent(prediction.confidence)}</strong>
+                    </div>
+                  </div>
+                  <div className="probability-list" aria-label="Class probabilities">
+                    {[...prediction.class_probabilities]
+                      .sort((left, right) => right.probability - left.probability)
+                      .map(({ class_name, probability }) => (
+                        <div className="probability-row" key={class_name}>
+                          <span>{class_name}</span>
+                          <div
+                            className="probability-track"
+                            role="meter"
+                            aria-label={`${class_name} probability`}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={probability * 100}
+                          >
+                            <span
+                              style={{ width: `${probability * 100}%` }}
+                            />
+                          </div>
+                          <strong>{formatPercent(probability)}</strong>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
         </section>
       </section>
 
@@ -254,14 +377,20 @@ export default function Home() {
         <button
           className="clear-button"
           type="button"
-          onClick={() => setFailingShots(new Set())}
+          onClick={() => {
+            predictionRequestId.current += 1;
+            setIsPredicting(false);
+            setFailingShots(new Set());
+            setPrediction(null);
+            setInferenceError(null);
+          }}
           disabled={failingShots.size === 0}
         >
           Clear selection
         </button>
       </footer>
       <p className="phase-note">
-        This phase treats each valid UCS shot as the selectable failure unit.
+        For this phase, each valid UCS shot is treated as one classifier map cell.
       </p>
     </main>
   );

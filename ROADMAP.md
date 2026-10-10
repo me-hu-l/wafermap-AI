@@ -304,3 +304,13 @@ Prefer small, understandable changes over large generated files.
 
 Before writing new geometry code, inspect and reuse concepts from the
 reference repository.
+
+## Current implementation status
+
+- Phase 1 geometry and interactive UCS-shot selection are implemented.
+- Phase 2 model integration is implemented: shot selections are converted to
+  a square categorical map, resized/encoded per the notebook, classified by
+  the saved CNN, and shown with probabilities for every class.
+- The current selection granularity is one UCS shot per map cell. Individual
+  die geometry/selection, Grad-CAM, and multi-wafer analysis are still future
+  phases.
