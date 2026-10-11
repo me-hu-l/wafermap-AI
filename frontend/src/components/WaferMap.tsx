@@ -102,22 +102,23 @@ export function WaferMap({
             .join(" ");
 
           return (
-            <polygon
-              key={key}
-              points={points}
-              className={`shot-cell${selected ? " shot-cell-failing" : ""}`}
-              role="button"
-              tabIndex={0}
-              aria-pressed={selected}
-              aria-label={`Shot ${shot.shot_x}, ${shot.shot_y}${selected ? ", marked failing" : ""}`}
-              onClick={() => onToggleShot(shot)}
-              onKeyDown={(event) => toggleWithKeyboard(event, shot)}
-            >
-              <title>
-                Shot ({shot.shot_x}, {shot.shot_y}) · origin (
-                {shot.origin_x.toLocaleString()}, {shot.origin_y.toLocaleString()}) µm
-              </title>
-            </polygon>
+            <g key={key}>
+              <polygon
+                points={points}
+                className={`shot-cell${selected ? " shot-cell-failing" : ""}`}
+                role="button"
+                tabIndex={0}
+                aria-pressed={selected}
+                aria-label={`Shot ${shot.shot_x}, ${shot.shot_y}${selected ? ", marked failing" : ""}`}
+                onClick={() => onToggleShot(shot)}
+                onKeyDown={(event) => toggleWithKeyboard(event, shot)}
+              >
+                <title>
+                  Shot ({shot.shot_x}, {shot.shot_y}) · origin (
+                  {shot.origin_x.toLocaleString()}, {shot.origin_y.toLocaleString()}) µm
+                </title>
+              </polygon>
+            </g>
           );
         })}
       </g>

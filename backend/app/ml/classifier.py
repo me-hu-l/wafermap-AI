@@ -47,6 +47,13 @@ class CNN(nn.Module):
     def forward(self, wafer_maps: torch.Tensor) -> torch.Tensor:
         return self.network(wafer_maps)
 
+    def forward_with_activations(
+        self, wafer_maps: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return logits and the final convolution block activations."""
+        activations = self.network[:6](wafer_maps)
+        return self.network[6:](activations), activations
+
 
 class ModelUnavailableError(RuntimeError):
     """Raised when the configured model checkpoint is missing or unusable."""

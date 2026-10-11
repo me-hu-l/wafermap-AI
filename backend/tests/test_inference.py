@@ -31,7 +31,28 @@ def test_prepare_model_input_rejects_invalid_categories() -> None:
 class FixedLogitClassifier(nn.Module):
     def forward(self, wafer_maps: torch.Tensor) -> torch.Tensor:
         assert wafer_maps.shape == (1, 3, 26, 26)
-        return torch.tensor([[0.0, 0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
+        logits, _ = self.forward_with_activations(wafer_maps)
+        return logits
+
+    def forward_with_activations(
+        self, wafer_maps: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        activations = wafer_maps[:, 1:2].repeat(1, 2, 1, 1).requires_grad_()
+        score = activations.mean()
+        logits = torch.stack(
+            (
+                score * 0,
+                score * 0,
+                score * 0,
+                score + 4,
+                score * 0,
+                score * 0,
+                score * 0,
+                score * 0,
+                score * 0,
+            )
+        ).unsqueeze(0)
+        return logits, activations
 
 
 def test_prediction_api_returns_probability_for_every_notebook_class(
@@ -64,6 +85,13 @@ def test_prediction_api_returns_probability_for_every_notebook_class(
     assert sum(
         item["probability"] for item in payload["class_probabilities"]
     ) == pytest.approx(1)
+    assert len(payload["gradcam_heatmap"]) == 2
+    assert all(len(row) == 2 for row in payload["gradcam_heatmap"])
+    assert all(
+        0 <= value <= 1
+        for row in payload["gradcam_heatmap"]
+        for value in row
+    )
 
 
 def test_prediction_api_surfaces_missing_model_as_service_unavailable(

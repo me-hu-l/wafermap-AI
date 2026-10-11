@@ -32,11 +32,35 @@ def predict_wafer_map(wafer_map: list[list[int]]) -> WaferMapPredictionResponse:
     model_input = prepare_model_input(wafer_map)
     classifier = get_classifier()
 
+    with torch.enable_grad():
+        logits, activations = classifier.forward_with_activations(model_input)
+        predicted_index = int(logits[0].argmax().item())
+        gradients = torch.autograd.grad(
+            outputs=logits[0, predicted_index],
+            inputs=activations,
+            retain_graph=False,
+            create_graph=False,
+        )[0]
+        channel_weights = gradients.mean(dim=(2, 3), keepdim=True)
+        heatmap = torch.relu((channel_weights * activations).sum(dim=1))[0]
+        maximum = heatmap.max()
+        if maximum.item() > 0:
+            heatmap = heatmap / maximum
+
+    heatmap_array = resize(
+        heatmap.detach().cpu().numpy(),
+        (len(wafer_map), len(wafer_map)),
+        order=1,
+        preserve_range=True,
+        anti_aliasing=False,
+    )
+    heatmap_maximum = float(heatmap_array.max())
+    if heatmap_maximum > 0:
+        heatmap_array = heatmap_array / heatmap_maximum
+
     with torch.inference_mode():
-        logits = classifier(model_input)
         probabilities = torch.softmax(logits, dim=1)[0].tolist()
 
-    predicted_index = max(range(len(probabilities)), key=probabilities.__getitem__)
     return WaferMapPredictionResponse(
         predicted_class=CLASS_NAMES[predicted_index],
         confidence=probabilities[predicted_index],
@@ -44,4 +68,5 @@ def predict_wafer_map(wafer_map: list[list[int]]) -> WaferMapPredictionResponse:
             ClassProbability(class_name=class_name, probability=probability)
             for class_name, probability in zip(CLASS_NAMES, probabilities)
         ],
+        gradcam_heatmap=heatmap_array.tolist(),
     )

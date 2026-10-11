@@ -340,10 +340,23 @@ h1 {
   letter-spacing: 0.07em;
 }
 
+.wafer-visualizations {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.wafer-visualizations:not(.has-gradcam) {
+  grid-template-columns: 1fr;
+}
+
 .map-canvas {
   position: relative;
-  width: min(100%, 630px);
-  margin: 6px auto 0;
+  width: 100%;
+  max-width: 630px;
+  margin: 0 auto;
 }
 
 .wafer-map {
@@ -477,6 +490,71 @@ h1 {
   letter-spacing: 0.08em;
 }
 
+.gradcam-panel {
+  width: 100%;
+  max-width: 630px;
+  margin: 0 auto;
+}
+
+.gradcam-panel-heading {
+  display: flex;
+  min-height: 43px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 1px 8px;
+}
+
+.gradcam-panel-heading .eyebrow {
+  margin-bottom: 4px;
+}
+
+.gradcam-panel-heading h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.gradcam-panel-heading > span {
+  padding-top: 2px;
+  color: #89948d;
+  font: 7px var(--mono);
+  letter-spacing: 0.04em;
+  text-align: right;
+}
+
+.gradcam-grid {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid #d9e1db;
+  border-radius: 4px;
+  background: #f9fbf9;
+}
+
+.gradcam-cell {
+  min-width: 0;
+  min-height: 0;
+  border: 0.35px solid #ffffffa8;
+}
+
+.gradcam-scale {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+  color: #849189;
+  font: 8px var(--mono);
+}
+
+.gradcam-scale i {
+  width: 100%;
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fff7f4, #eb4527);
+}
+
 .classification-panel {
   margin-top: 22px;
   padding-top: 19px;
@@ -524,6 +602,13 @@ h1 {
   border: 1px solid #dce9e0;
   border-radius: 7px;
   background: #fbfdfb;
+}
+
+.gradcam-description {
+  margin: 0 0 13px;
+  color: #75817c;
+  font-size: 10px;
+  line-height: 1.6;
 }
 
 .prediction-summary {
@@ -711,8 +796,8 @@ h1 {
     gap: 14px;
   }
 
-  .map-canvas {
-    width: min(100%, 560px);
+  .wafer-visualizations {
+    gap: 10px;
   }
 
   .analysis-strip {
@@ -755,6 +840,10 @@ h1 {
 
   .map-coordinate {
     display: none;
+  }
+
+  .wafer-visualizations {
+    grid-template-columns: 1fr;
   }
 
   .classification-heading {

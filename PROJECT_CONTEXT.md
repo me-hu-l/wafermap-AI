@@ -25,6 +25,9 @@ For the current UI, each selectable UCS shot is treated as one classifier map
 cell. The square input is padded with background cells; valid unmarked shots
 are state 1 and marked failing shots are state 2. Individual-die interaction
 and die-size configuration remain future work.
+Grad-CAM is computed from the final convolution block for the predicted class;
+the normalized heatmap is resized back to the original square map dimensions
+and displayed beside the wafer layout.
 Current objective is application integration, not model improvement.
 
 ## Reference Repository

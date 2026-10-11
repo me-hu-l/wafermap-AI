@@ -7,6 +7,11 @@ WaferMapRow = Annotated[
     list[WaferMapValue],
     Field(min_length=1, max_length=512),
 ]
+HeatmapValue = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
+HeatmapRow = Annotated[
+    list[HeatmapValue],
+    Field(min_length=1, max_length=512),
+]
 
 
 class WaferMapPredictionRequest(BaseModel):
@@ -32,3 +37,11 @@ class WaferMapPredictionResponse(BaseModel):
         min_length=9,
         max_length=9,
     )
+    gradcam_heatmap: list[HeatmapRow] = Field(min_length=1, max_length=512)
+
+    @model_validator(mode="after")
+    def gradcam_heatmap_must_be_square(self) -> "WaferMapPredictionResponse":
+        dimension = len(self.gradcam_heatmap)
+        if any(len(row) != dimension for row in self.gradcam_heatmap):
+            raise ValueError("gradcam_heatmap must be a square matrix.")
+        return self

@@ -40,7 +40,10 @@ map** to view the predicted pattern, its confidence, and probabilities for
 all nine classes. The API endpoint is `POST /api/inference/predict`; its
 `wafer_map` input must be a square matrix containing only 0 (background),
 1 (passing), and 2 (failing). In the current phase, each selectable UCS shot
-is one input map cell.
+is one input map cell. The response also contains a Grad-CAM heatmap for the
+predicted class, computed from the CNN's final convolution block, resized back
+to the submitted map dimensions, and displayed as a separate heatmap beside
+the wafer layout.
 
 ## Geometry behavior
 

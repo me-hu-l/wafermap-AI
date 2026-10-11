@@ -311,6 +311,8 @@ reference repository.
 - Phase 2 model integration is implemented: shot selections are converted to
   a square categorical map, resized/encoded per the notebook, classified by
   the saved CNN, and shown with probabilities for every class.
+- Phase 3 explainability is implemented: Grad-CAM uses the final convolution
+  block and its heatmap is rescaled to the submitted map dimensions and
+  displayed beside the wafer layout.
 - The current selection granularity is one UCS shot per map cell. Individual
-  die geometry/selection, Grad-CAM, and multi-wafer analysis are still future
-  phases.
+  die geometry/selection and multi-wafer analysis are still future phases.

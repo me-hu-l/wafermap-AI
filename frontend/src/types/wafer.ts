@@ -45,4 +45,5 @@ export interface WaferMapPredictionResponse {
   predicted_class: string;
   confidence: number;
   class_probabilities: ClassProbability[];
+  gradcam_heatmap: number[][];
 }

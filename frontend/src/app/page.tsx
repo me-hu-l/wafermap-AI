@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { GradcamHeatmap } from "@/components/GradcamHeatmap";
 import { WaferMap } from "@/components/WaferMap";
 import { createWaferLayout, predictWaferMap } from "@/lib/api";
 import { buildWaferMap } from "@/lib/wafer-map";
@@ -156,7 +157,7 @@ export default function Home() {
         <div className="topbar-meta">
           <span className="status-dot" />
           <span>LAYOUT WORKSPACE</span>
-          <span className="phase-tag">PHASE 02</span>
+          <span className="phase-tag">PHASE 03</span>
         </div>
       </header>
 
@@ -251,17 +252,28 @@ export default function Home() {
 
           {layout ? (
             <>
-              <div className="map-canvas">
-                <WaferMap
-                  layout={layout}
-                  failingShots={failingShots}
-                  onToggleShot={toggleShot}
-                />
-                <div className="map-axis-label map-axis-x">X</div>
-                <div className="map-axis-label map-axis-y">Y</div>
-                <div className="map-edge-label">
-                  Ø {formatNumber(layout.wafer_diameter)} µm
+              <div
+                className={`wafer-visualizations${prediction ? " has-gradcam" : ""}`}
+              >
+                <div className="map-canvas">
+                  <WaferMap
+                    layout={layout}
+                    failingShots={failingShots}
+                    onToggleShot={toggleShot}
+                  />
+                  <div className="map-axis-label map-axis-x">X</div>
+                  <div className="map-axis-label map-axis-y">Y</div>
+                  <div className="map-edge-label">
+                    Ø {formatNumber(layout.wafer_diameter)} µm
+                  </div>
                 </div>
+                {prediction && (
+                  <GradcamHeatmap
+                    layout={layout}
+                    heatmap={prediction.gradcam_heatmap}
+                    predictedClass={prediction.predicted_class}
+                  />
+                )}
               </div>
               <div className="map-legend" aria-label="Map legend">
                 <span><i className="legend-swatch normal" /> Valid shot</span>
@@ -287,7 +299,7 @@ export default function Home() {
             <section className="classification-panel" aria-label="Wafer classification">
               <div className="classification-heading">
                 <div>
-                  <p className="eyebrow">03 / CNN CLASSIFICATION</p>
+                  <p className="eyebrow">03 / CNN EXPLAINABILITY</p>
                   <h3>Defect pattern</h3>
                 </div>
                 <span className="classification-input-note">
@@ -318,6 +330,11 @@ export default function Home() {
               )}
               {prediction && (
                 <div className="prediction-result" aria-live="polite">
+                  <p className="gradcam-description">
+                    Grad-CAM highlights the spatial regions that most
+                    influenced this prediction and is shown beside the wafer
+                    layout.
+                  </p>
                   <div className="prediction-summary">
                     <div>
                       <span>PREDICTED PATTERN</span>

@@ -20,10 +20,17 @@ function orientShot(
   }
 }
 
-export function buildWaferMap(
-  layout: WaferLayoutResponse,
-  failingShots: ReadonlySet<string>,
-): number[][] {
+export interface WaferMapPosition {
+  row: number;
+  column: number;
+}
+
+export interface WaferMapGrid {
+  dimension: number;
+  positions: ReadonlyMap<string, WaferMapPosition>;
+}
+
+export function getWaferMapGrid(layout: WaferLayoutResponse): WaferMapGrid {
   if (layout.shots.length === 0) {
     throw new Error("The current layout has no valid shots to classify.");
   }
@@ -47,17 +54,30 @@ export function buildWaferMap(
   const dimension = Math.max(columns, rows);
   const columnPadding = Math.floor((dimension - columns) / 2);
   const rowPadding = Math.floor((dimension - rows) / 2);
-  const waferMap = Array.from({ length: dimension }, () =>
-    Array<number>(dimension).fill(0),
-  );
+  const positions = new Map<string, WaferMapPosition>();
 
   for (const { shot, position } of orientedShots) {
     const [x, y] = position;
-    const column = x - minX + columnPadding;
-    const row = maxY - y + rowPadding;
-    waferMap[row][column] = failingShots.has(
-      `${shot.shot_x},${shot.shot_y}`,
-    )
+    positions.set(`${shot.shot_x},${shot.shot_y}`, {
+      column: x - minX + columnPadding,
+      row: maxY - y + rowPadding,
+    });
+  }
+
+  return { dimension, positions };
+}
+
+export function buildWaferMap(
+  layout: WaferLayoutResponse,
+  failingShots: ReadonlySet<string>,
+): number[][] {
+  const grid = getWaferMapGrid(layout);
+  const waferMap = Array.from({ length: grid.dimension }, () =>
+    Array<number>(grid.dimension).fill(0),
+  );
+
+  for (const [key, position] of grid.positions) {
+    waferMap[position.row][position.column] = failingShots.has(key)
       ? 2
       : 1;
   }
