@@ -94,6 +94,7 @@ def get_classifier() -> CNN:
             checkpoint_path,
             map_location="cpu",
             weights_only=True,
+            mmap=True
         )
         if not isinstance(state_dict, dict):
             raise TypeError("Model checkpoint does not contain a state dict.")
