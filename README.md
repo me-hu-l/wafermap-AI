@@ -27,10 +27,34 @@ npm run dev
 Open `http://localhost:3000`. The frontend calls the backend at
 `http://localhost:8000`; set `NEXT_PUBLIC_API_URL` to override that URL.
 
+## Backend deployment settings
+
+The backend accepts these optional environment variables:
+
+- `FRONTEND_URL`: deployed frontend origin allowed by CORS. Localhost remains
+  allowed for development. Defaults to no additional origin.
+- `REPO_ID`: Hugging Face model repository ID, such as `owner/repository`.
+- `FILENAME`: checkpoint file path within that repository.
+
+For example, set these in the backend hosting environment:
+
+```text
+FRONTEND_URL=https://your-frontend.example.com
+REPO_ID=your-account/wafermap-classifier
+FILENAME=plain_cnn_classifier_v1.pth
+```
+
+The backend downloads the checkpoint with `huggingface_hub` and loads it at
+startup. For a private repository, configure the `HF_TOKEN` environment
+variable with a read-access token. If both `REPO_ID` and `FILENAME` are unset,
+the backend uses the bundled
+`models/plain_cnn_classifier_v1.pth` checkpoint. Configure both Hugging Face
+variables together; setting only one is a startup error.
+
 ## CNN wafer classification
 
-The backend loads `models/plain_cnn_classifier_v1.pth` on the first prediction
-request and reuses the model for subsequent requests. The classifier follows
+The backend loads the checkpoint at startup and reuses the model for prediction
+requests. The classifier follows
 the architecture and preprocessing in
 [`notebooks/EDA+baseline_CNN.ipynb`](./notebooks/EDA+baseline_CNN.ipynb):
 the categorical 0/1/2 map is resized with nearest-neighbor interpolation to

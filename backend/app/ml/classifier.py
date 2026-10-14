@@ -1,8 +1,11 @@
+import os
 import pickle
 from functools import lru_cache
 from pathlib import Path
 
 import torch
+from huggingface_hub import hf_hub_download
+from huggingface_hub.errors import HfHubHTTPError, HFValidationError
 from torch import nn
 
 CLASS_NAMES = (
@@ -17,7 +20,7 @@ CLASS_NAMES = (
     "none",
 )
 
-MODEL_PATH = (
+DEFAULT_MODEL_PATH = (
     Path(__file__).resolve().parents[3]
     / "models"
     / "plain_cnn_classifier_v1.pth"
@@ -59,14 +62,39 @@ class ModelUnavailableError(RuntimeError):
     """Raised when the configured model checkpoint is missing or unusable."""
 
 
+def configured_model_path() -> Path:
+    repo_id = (os.getenv("REPO_ID") or "").strip()
+    filename = (os.getenv("FILENAME") or "").strip()
+    if not repo_id and not filename:
+        return DEFAULT_MODEL_PATH
+    if not repo_id or not filename:
+        raise ModelUnavailableError(
+            "Both REPO_ID and FILENAME must be set to download the model from Hugging Face."
+        )
+
+    try:
+        checkpoint_path = hf_hub_download(repo_id=repo_id, filename=filename)
+    except (HfHubHTTPError, HFValidationError, OSError) as error:
+        raise ModelUnavailableError(
+            f"Unable to download model file {filename!r} from Hugging Face "
+            f"repository {repo_id!r}: {error}"
+        ) from error
+    return Path(checkpoint_path)
+
+
 @lru_cache(maxsize=1)
 def get_classifier() -> CNN:
-    if not MODEL_PATH.is_file():
-        raise ModelUnavailableError(f"Model checkpoint not found: {MODEL_PATH}")
+    checkpoint_path = configured_model_path()
+    if not checkpoint_path.is_file():
+        raise ModelUnavailableError(f"Model checkpoint not found: {checkpoint_path}")
 
     classifier = CNN()
     try:
-        state_dict = torch.load(MODEL_PATH, map_location="cpu", weights_only=True)
+        state_dict = torch.load(
+            checkpoint_path,
+            map_location="cpu",
+            weights_only=True,
+        )
         if not isinstance(state_dict, dict):
             raise TypeError("Model checkpoint does not contain a state dict.")
         classifier.load_state_dict(state_dict)
@@ -79,7 +107,7 @@ def get_classifier() -> CNN:
         pickle.UnpicklingError,
     ) as error:
         raise ModelUnavailableError(
-            f"Unable to load model checkpoint {MODEL_PATH}: {error}"
+            f"Unable to load model checkpoint {checkpoint_path}: {error}"
         ) from error
 
     classifier.eval()

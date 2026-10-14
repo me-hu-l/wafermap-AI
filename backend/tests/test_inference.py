@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 import httpx
 import pytest
@@ -7,8 +8,64 @@ from torch import nn
 
 from app import main
 from app.main import app
+from app.ml import classifier
 from app.ml.classifier import CLASS_NAMES, ModelUnavailableError
 from app.services import inference
+
+
+def test_model_path_uses_hugging_face_repository_or_local_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    downloaded_path = Path("C:/cached/wafer-cnn.pth")
+    download_calls: list[tuple[str, str]] = []
+
+    def download_model(*, repo_id: str, filename: str) -> str:
+        download_calls.append((repo_id, filename))
+        return str(downloaded_path)
+
+    monkeypatch.setattr(classifier, "hf_hub_download", download_model)
+    monkeypatch.setenv("REPO_ID", "example/wafer-model")
+    monkeypatch.setenv("FILENAME", "weights/model.pth")
+    assert classifier.configured_model_path() == downloaded_path
+    assert download_calls == [("example/wafer-model", "weights/model.pth")]
+
+    monkeypatch.setenv("REPO_ID", "")
+    monkeypatch.setenv("FILENAME", "")
+    assert classifier.configured_model_path() == classifier.DEFAULT_MODEL_PATH
+
+
+def test_model_path_requires_both_hugging_face_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REPO_ID", "example/wafer-model")
+    monkeypatch.delenv("FILENAME", raising=False)
+    with pytest.raises(ModelUnavailableError, match="Both REPO_ID and FILENAME"):
+        classifier.configured_model_path()
+
+
+def test_model_download_errors_are_reported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_download(*, repo_id: str, filename: str) -> str:
+        assert repo_id == "example/wafer-model"
+        assert filename == "weights/model.pth"
+        raise OSError("network unavailable")
+
+    monkeypatch.setattr(classifier, "hf_hub_download", fail_download)
+    monkeypatch.setenv("REPO_ID", "example/wafer-model")
+    monkeypatch.setenv("FILENAME", "weights/model.pth")
+    with pytest.raises(ModelUnavailableError, match="network unavailable"):
+        classifier.configured_model_path()
+
+
+def test_cors_origins_include_configured_frontend_and_localhost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FRONTEND_URL", "https://wafermap.example/")
+    assert main.get_allowed_origins() == [
+        "http://localhost:3000",
+        "https://wafermap.example",
+    ]
 
 
 def test_application_loads_classifier_during_startup(

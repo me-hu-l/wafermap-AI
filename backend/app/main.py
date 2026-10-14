@@ -1,3 +1,4 @@
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -8,6 +9,14 @@ from app.api.routes.inference import router as inference_router
 from app.api.routes.wafers import router as wafers_router
 from app.ml.classifier import get_classifier
 from app.schemas.health import HealthResponse
+
+
+def get_allowed_origins() -> list[str]:
+    origins = ["http://localhost:3000"]
+    frontend_url = (os.getenv("FRONTEND_URL") or "").strip().rstrip("/")
+    if frontend_url and frontend_url not in origins:
+        origins.append(frontend_url)
+    return origins
 
 
 @asynccontextmanager
@@ -23,7 +32,7 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=get_allowed_origins(),
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
 )
