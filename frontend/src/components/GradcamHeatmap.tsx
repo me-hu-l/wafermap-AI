@@ -43,7 +43,7 @@ export function GradcamHeatmap({
               className="gradcam-cell"
               key={`${row},${column}`}
               style={{
-                backgroundColor: `rgba(235, 69, 39, ${intensity * 0.9})`,
+                backgroundColor: `rgba(24, 33, 30, ${intensity * 0.9})`,
               }}
               title={`Importance: ${(intensity * 100).toFixed(1)}%`}
             />

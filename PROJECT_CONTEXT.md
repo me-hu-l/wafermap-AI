@@ -24,11 +24,20 @@ Scratch, none.
 For the current UI, each selectable UCS shot is treated as one classifier map
 cell. The square input is padded with background cells; valid unmarked shots
 are state 1 and marked failing shots are state 2. Individual-die interaction
-and die-size configuration remain future work.
+based on physical die geometry and independent die-size configuration remain
+future work.
 Grad-CAM is computed from the final convolution block for the predicted class;
 the normalized heatmap is resized back to the original square map dimensions
 and displayed beside the wafer layout.
 Current objective is application integration, not model improvement.
+
+The UI presents each selectable UCS shot as a die while keeping the existing
+shot-based geometry and API representation unchanged. Users can mark failing
+dies manually or generate an arbitrary randomized subset for testing. Yield
+and D0 are calculated from the valid geometry and observed failing selection
+by the backend metrics service; die area is converted from µm² to cm² and
+D0 is reported in defects/cm². For zero yield, D0 is mathematically unbounded
+and the API represents it as null for the UI to display as infinity.
 
 ## Reference Repository
 
@@ -86,3 +95,8 @@ Multi-wafer
 - stacking
 - recurrent failure locations
 - Pareto analysis
+
+Multi-wafer comparison and stacking are implemented. Added wafers are held in
+the browser session and compared by backend endpoints. Stacking aggregates
+failure frequency by common UCS shot/die coordinates. Added wafers are grouped
+by exact geometry and stacked separately, including one-wafer geometry groups.

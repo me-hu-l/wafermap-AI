@@ -221,6 +221,12 @@ requirements rather than inventing an alternative definition.
 
 Keep the calculation isolated in a testable service.
 
+For the current UCS-shot implementation, treat each valid selectable shot
+as one die and use the configured shot area as the die area. Geometry is
+configured in µm; convert the rectangular die area to cm² before reporting
+D0 in defects/cm². If yield is zero, D0 is unbounded and should be represented
+explicitly rather than serialized as a non-finite number.
+
 TESTING
 
 Create unit tests for:
@@ -314,5 +320,18 @@ reference repository.
 - Phase 3 explainability is implemented: Grad-CAM uses the final convolution
   block and its heatmap is rescaled to the submitted map dimensions and
   displayed beside the wafer layout.
+- Yield and Poisson-model D0 are calculated by a backend metrics service from
+  the valid geometry and selected failing coordinates, and are shown in the
+  analysis strip.
+- Users can generate a randomized 5–20% failing-die pattern for quick
+  classification testing. The UI calls each selectable UCS shot a die while
+  preserving the shot terminology in the geometry and API code.
+- Multi-wafer comparison is implemented: users can add named wafers, inspect
+  failure maps and yield/D0 metrics side by side, and remove wafers from the
+  in-memory set.
+- Yield/D0 Pareto analysis and a stacked wafer view of die failure frequency
+  are implemented. Wafers are grouped by geometry before stacking so each
+  stack contains only comparable die coordinates; single-wafer geometry
+  groups are also displayed independently.
 - The current selection granularity is one UCS shot per map cell. Individual
-  die geometry/selection and multi-wafer analysis are still future phases.
+  die geometry/selection remains future work.

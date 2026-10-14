@@ -5,9 +5,29 @@ import pytest
 import torch
 from torch import nn
 
+from app import main
 from app.main import app
 from app.ml.classifier import CLASS_NAMES, ModelUnavailableError
 from app.services import inference
+
+
+def test_application_loads_classifier_during_startup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loaded_models: list[object] = []
+    classifier = object()
+
+    def load_classifier() -> object:
+        loaded_models.append(classifier)
+        return classifier
+
+    monkeypatch.setattr(main, "get_classifier", load_classifier)
+
+    async def start_application() -> None:
+        async with app.router.lifespan_context(app):
+            assert loaded_models == [classifier]
+
+    asyncio.run(start_application())
 
 
 def test_prepare_model_input_resizes_categories_and_one_hot_encodes() -> None:

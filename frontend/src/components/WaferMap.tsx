@@ -1,19 +1,22 @@
 "use client";
 
 import type { KeyboardEvent } from "react";
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import type { WaferLayoutResponse, WaferShot } from "@/types/wafer";
 
 interface WaferMapProps {
   layout: WaferLayoutResponse;
   failingShots: ReadonlySet<string>;
-  onToggleShot: (shot: WaferShot) => void;
+  onToggleShot?: (shot: WaferShot) => void;
+  interactive?: boolean;
+  failureFrequency?: ReadonlyMap<string, number>;
 }
 
 const VIEW_SIZE = 720;
 const CENTER = VIEW_SIZE / 2;
 const WAFER_RADIUS = 306;
-const PADDING = 22;
+const NOTCH_HALF_WIDTH = 9;
+const NOTCH_DEPTH = 8;
 
 function shotKey(shot: WaferShot): string {
   return `${shot.shot_x},${shot.shot_y}`;
@@ -27,27 +30,36 @@ export function WaferMap({
   layout,
   failingShots,
   onToggleShot,
+  interactive = true,
+  failureFrequency,
 }: WaferMapProps) {
-  const scale = WAFER_RADIUS / layout.wafer_radius;
+  const clipPathId = useId().replaceAll(":", "");
   const usableRadius = WAFER_RADIUS * (layout.usable_radius / layout.wafer_radius);
-  const notchPosition = useMemo(() => {
-    const radius = WAFER_RADIUS - PADDING * 0.65;
+  const notchRotation = useMemo(() => {
     switch (layout.notch_orientation) {
       case "LEFT":
-        return { x: CENTER - radius, y: CENTER };
+        return -90;
       case "UP":
-        return { x: CENTER, y: CENTER - radius };
+        return 180;
       case "RIGHT":
-        return { x: CENTER + radius, y: CENTER };
+        return 90;
       default:
-        return { x: CENTER, y: CENTER + radius };
+        return 0;
     }
   }, [layout.notch_orientation]);
+  const notchHalfHeight = Math.sqrt(
+    WAFER_RADIUS ** 2 - NOTCH_HALF_WIDTH ** 2,
+  );
+  const notchPath = [
+    `M ${CENTER - NOTCH_HALF_WIDTH} ${CENTER + notchHalfHeight}`,
+    `L ${CENTER} ${CENTER + WAFER_RADIUS - NOTCH_DEPTH}`,
+    `L ${CENTER + NOTCH_HALF_WIDTH} ${CENTER + notchHalfHeight}`,
+  ].join(" ");
 
   function toggleWithKeyboard(event: KeyboardEvent<SVGPolygonElement>, shot: WaferShot) {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      onToggleShot(shot);
+      onToggleShot?.(shot);
     }
   }
 
@@ -56,10 +68,10 @@ export function WaferMap({
       className="wafer-map"
       viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`}
       role="group"
-      aria-label="Interactive wafer shot map"
+      aria-label="Interactive wafer die map"
     >
       <defs>
-        <clipPath id="wafer-clip">
+        <clipPath id={`wafer-clip-${clipPathId}`}>
           <circle cx={CENTER} cy={CENTER} r={WAFER_RADIUS} />
         </clipPath>
       </defs>
@@ -89,10 +101,11 @@ export function WaferMap({
         y2={CENTER + WAFER_RADIUS}
         className="wafer-axis"
       />
-      <g clipPath="url(#wafer-clip)">
+      <g clipPath={`url(#wafer-clip-${clipPathId})`}>
         {layout.shots.map((shot) => {
           const key = shotKey(shot);
           const selected = failingShots.has(key);
+          const frequency = failureFrequency?.get(key) ?? 0;
           const points = shot.corners
             .map((corner) => {
               const x = coordinateToView(corner.x, layout.wafer_radius);
@@ -105,29 +118,47 @@ export function WaferMap({
             <g key={key}>
               <polygon
                 points={points}
-                className={`shot-cell${selected ? " shot-cell-failing" : ""}`}
-                role="button"
-                tabIndex={0}
-                aria-pressed={selected}
-                aria-label={`Shot ${shot.shot_x}, ${shot.shot_y}${selected ? ", marked failing" : ""}`}
-                onClick={() => onToggleShot(shot)}
-                onKeyDown={(event) => toggleWithKeyboard(event, shot)}
+                className={`shot-cell${selected ? " shot-cell-failing" : ""}${frequency > 0 ? " shot-cell-stacked" : ""}`}
+                style={
+                  frequency > 0
+                    ? {
+                        fill: `rgb(255, ${Math.round(239 - frequency * 130)}, ${Math.round(220 - frequency * 170)})`,
+                      }
+                    : undefined
+                }
+                role={interactive ? "button" : "img"}
+                tabIndex={interactive ? 0 : undefined}
+                aria-pressed={interactive ? selected : undefined}
+                aria-label={
+                  interactive
+                    ? `Die ${shot.shot_x}, ${shot.shot_y}${selected ? ", marked failing" : ""}`
+                    : frequency > 0
+                      ? `Die ${shot.shot_x}, ${shot.shot_y}, failed on ${Math.round(frequency * 100)}% of wafers`
+                      : `Die ${shot.shot_x}, ${shot.shot_y}, no failures`
+                }
+                onClick={interactive ? () => onToggleShot?.(shot) : undefined}
+                onKeyDown={
+                  interactive
+                    ? (event) => toggleWithKeyboard(event, shot)
+                    : undefined
+                }
               >
                 <title>
-                  Shot ({shot.shot_x}, {shot.shot_y}) · origin (
+                  Die ({shot.shot_x}, {shot.shot_y}) · origin (
                   {shot.origin_x.toLocaleString()}, {shot.origin_y.toLocaleString()}) µm
+                  {frequency > 0
+                    ? ` · failing in ${Math.round(frequency * 100)}% of wafers`
+                    : ""}
                 </title>
               </polygon>
             </g>
           );
         })}
       </g>
-      <circle
-        cx={notchPosition.x}
-        cy={notchPosition.y}
-        r={Math.max(4, layout.wafer_radius * scale * 0.045)}
-        className="wafer-notch"
-      />
+      <g transform={`rotate(${notchRotation} ${CENTER} ${CENTER})`}>
+        <path d={`${notchPath} Z`} className="wafer-notch-cutout" />
+        <path d={notchPath} className="wafer-notch" />
+      </g>
       <circle cx={CENTER} cy={CENTER} r="3" className="wafer-center" />
     </svg>
   );

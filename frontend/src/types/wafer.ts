@@ -47,3 +47,58 @@ export interface WaferMapPredictionResponse {
   class_probabilities: ClassProbability[];
   gradcam_heatmap: number[][];
 }
+
+export interface ShotCoordinate {
+  shot_x: number;
+  shot_y: number;
+}
+
+export interface WaferMetricsRequest {
+  layout: WaferLayoutRequest;
+  failing_shots: ShotCoordinate[];
+}
+
+export interface WaferMetricsResponse {
+  total_valid_dies: number;
+  failing_dies: number;
+  passing_dies: number;
+  yield_fraction: number;
+  die_area_cm2: number;
+  d0_per_cm2: number | null;
+}
+
+export interface WaferAnalysisInput {
+  wafer_id: string;
+  name: string;
+  layout: WaferLayoutRequest;
+  failing_shots: ShotCoordinate[];
+}
+
+export type WaferAnalysisRecord = Omit<WaferAnalysisInput, "layout"> & {
+  layout: WaferLayoutResponse;
+  prediction?: WaferMapPredictionResponse;
+};
+
+export interface WaferComparisonItem {
+  wafer_id: string;
+  name: string;
+  metrics: WaferMetricsResponse;
+}
+
+export interface WaferComparisonResponse {
+  wafers: WaferComparisonItem[];
+}
+
+export interface StackedDie {
+  shot_x: number;
+  shot_y: number;
+  failing_wafers: number;
+  observed_wafers: number;
+  failure_fraction: number;
+}
+
+export interface WaferStackResponse {
+  total_wafers: number;
+  layout: WaferLayoutResponse;
+  dies: StackedDie[];
+}

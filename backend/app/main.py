@@ -1,11 +1,26 @@
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.inference import router as inference_router
 from app.api.routes.wafers import router as wafers_router
+from app.ml.classifier import get_classifier
 from app.schemas.health import HealthResponse
 
-app = FastAPI(title="WaferMap AI API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
+    get_classifier()
+    yield
+
+
+app = FastAPI(
+    title="WaferMap AI API",
+    version="0.1.0",
+    lifespan=lifespan,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],

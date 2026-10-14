@@ -3,8 +3,9 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "WaferMap AI | Wafer Layout",
-  description: "Interactive semiconductor wafer layout and defect analysis.",
+  title: "WaferMap AI | Wafer Analysis",
+  description:
+    "Configure wafer layouts, analyze yield and D0, and classify wafer-map defect signatures.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

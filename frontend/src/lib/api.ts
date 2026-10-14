@@ -3,6 +3,11 @@ import type {
   WaferLayoutResponse,
   WaferMapPredictionRequest,
   WaferMapPredictionResponse,
+  WaferMetricsRequest,
+  WaferMetricsResponse,
+  WaferAnalysisInput,
+  WaferComparisonResponse,
+  WaferStackResponse,
 } from "@/types/wafer";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -55,4 +60,58 @@ export async function predictWaferMap(
   }
 
   return (await response.json()) as WaferMapPredictionResponse;
+}
+
+export async function calculateWaferMetrics(
+  request: WaferMetricsRequest,
+  signal?: AbortSignal,
+): Promise<WaferMetricsResponse> {
+  const response = await fetch(`${API_URL}/api/wafers/metrics`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+    signal,
+  });
+
+  if (!response.ok) {
+    await throwApiError(response, "Wafer metrics");
+  }
+
+  return (await response.json()) as WaferMetricsResponse;
+}
+
+export async function compareWafers(
+  wafers: WaferAnalysisInput[],
+  signal?: AbortSignal,
+): Promise<WaferComparisonResponse> {
+  const response = await fetch(`${API_URL}/api/wafers/compare`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ wafers }),
+    signal,
+  });
+
+  if (!response.ok) {
+    await throwApiError(response, "Wafer comparison");
+  }
+
+  return (await response.json()) as WaferComparisonResponse;
+}
+
+export async function stackWafers(
+  wafers: WaferAnalysisInput[],
+  signal?: AbortSignal,
+): Promise<WaferStackResponse> {
+  const response = await fetch(`${API_URL}/api/wafers/stack`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ wafers }),
+    signal,
+  });
+
+  if (!response.ok) {
+    await throwApiError(response, "Wafer stacking");
+  }
+
+  return (await response.json()) as WaferStackResponse;
 }

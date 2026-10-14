@@ -1,16 +1,29 @@
 "use client";
 
-import { useCallback, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
 import { GradcamHeatmap } from "@/components/GradcamHeatmap";
+import { WaferAnalytics } from "@/components/WaferAnalytics";
 import { WaferMap } from "@/components/WaferMap";
-import { createWaferLayout, predictWaferMap } from "@/lib/api";
+import {
+  calculateWaferMetrics,
+  createWaferLayout,
+  predictWaferMap,
+} from "@/lib/api";
 import { buildWaferMap } from "@/lib/wafer-map";
 import type {
   NotchOrientation,
   WaferLayoutRequest,
   WaferLayoutResponse,
   WaferMapPredictionResponse,
+  WaferMetricsResponse,
+  WaferAnalysisRecord,
   WaferShot,
 } from "@/types/wafer";
 
@@ -31,8 +44,8 @@ const NUMERIC_FIELDS: {
 }[] = [
   { key: "wafer_diameter", label: "Wafer diameter", step: 100 },
   { key: "edge_exclusion", label: "Edge exclusion", step: 100 },
-  { key: "shot_width", label: "Shot width", step: 100 },
-  { key: "shot_height", label: "Shot height", step: 100 },
+  { key: "shot_width", label: "Die width", step: 100 },
+  { key: "shot_height", label: "Die height", step: 100 },
   { key: "center_offset_x", label: "Center offset X", step: 100 },
   { key: "center_offset_y", label: "Center offset Y", step: 100 },
 ];
@@ -52,16 +65,39 @@ function formatPercent(value: number): string {
   }).format(value);
 }
 
+function formatConfidence(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "percent",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatDensity(value: number | null): string {
+  if (value === null) {
+    return "∞";
+  }
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 export default function Home() {
   const [configuration, setConfiguration] = useState(DEFAULT_CONFIGURATION);
   const [layout, setLayout] = useState<WaferLayoutResponse | null>(null);
   const [failingShots, setFailingShots] = useState<Set<string>>(new Set());
+  const [randomFailurePercent, setRandomFailurePercent] = useState(10);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPredicting, setIsPredicting] = useState(false);
   const [prediction, setPrediction] =
     useState<WaferMapPredictionResponse | null>(null);
   const [inferenceError, setInferenceError] = useState<string | null>(null);
+  const [metrics, setMetrics] = useState<WaferMetricsResponse | null>(null);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
+  const [isMetricsPending, setIsMetricsPending] = useState(false);
+  const [waferRecords, setWaferRecords] = useState<WaferAnalysisRecord[]>([]);
+  const [nextWaferName, setNextWaferName] = useState("Wafer 1");
   const predictionRequestId = useRef(0);
 
   const loadLayout = useCallback(async (request: WaferLayoutRequest) => {
@@ -71,6 +107,9 @@ export default function Home() {
       const nextLayout = await createWaferLayout(request);
       setLayout(nextLayout);
       setFailingShots(new Set());
+      setMetrics(null);
+      setMetricsError(null);
+      setIsMetricsPending(true);
       predictionRequestId.current += 1;
       setIsPredicting(false);
       setPrediction(null);
@@ -86,6 +125,53 @@ export default function Home() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!layout) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const failingCoordinates = Array.from(failingShots, (coordinate) => {
+      const [shot_x, shot_y] = coordinate.split(",").map(Number);
+      return { shot_x, shot_y };
+    });
+    void calculateWaferMetrics(
+      {
+        layout: {
+          wafer_diameter: layout.wafer_diameter,
+          edge_exclusion: layout.edge_exclusion,
+          shot_width: layout.shot_width,
+          shot_height: layout.shot_height,
+          center_offset_x: layout.center_offset_x,
+          center_offset_y: layout.center_offset_y,
+          notch_orientation: layout.notch_orientation,
+        },
+        failing_shots: failingCoordinates,
+      },
+      controller.signal,
+    )
+      .then((result) => {
+        if (!controller.signal.aborted) {
+          setMetrics(result);
+          setMetricsError(null);
+          setIsMetricsPending(false);
+        }
+      })
+      .catch((requestError: unknown) => {
+        if (!controller.signal.aborted) {
+          setMetrics(null);
+          setIsMetricsPending(false);
+          setMetricsError(
+            requestError instanceof Error
+              ? requestError.message
+              : "An unexpected error occurred while calculating wafer metrics.",
+          );
+        }
+      });
+
+    return () => controller.abort();
+  }, [layout, failingShots]);
+
   function updateNumber(
     key: Exclude<keyof WaferLayoutRequest, "notch_orientation">,
     value: string,
@@ -99,6 +185,9 @@ export default function Home() {
     setIsPredicting(false);
     setPrediction(null);
     setInferenceError(null);
+    setMetrics(null);
+    setMetricsError(null);
+    setIsMetricsPending(true);
     setFailingShots((current) => {
       const next = new Set(current);
       if (next.has(key)) {
@@ -108,6 +197,35 @@ export default function Home() {
       }
       return next;
     });
+  }
+
+  function generateRandomFailures() {
+    if (!layout || layout.shots.length === 0) {
+      return;
+    }
+
+    const shuffledShots = [...layout.shots];
+    for (let index = shuffledShots.length - 1; index > 0; index -= 1) {
+      const randomIndex = Math.floor(Math.random() * (index + 1));
+      [shuffledShots[index], shuffledShots[randomIndex]] = [
+        shuffledShots[randomIndex],
+        shuffledShots[index],
+      ];
+    }
+    const failureCount = Math.round(
+      shuffledShots.length * (randomFailurePercent / 100),
+    );
+
+    predictionRequestId.current += 1;
+    setIsPredicting(false);
+    setPrediction(null);
+    setInferenceError(null);
+    setMetrics(null);
+    setMetricsError(null);
+    setIsMetricsPending(true);
+    setFailingShots(
+      new Set(shuffledShots.slice(0, failureCount).map(shotKey)),
+    );
   }
 
   async function classifyWafer() {
@@ -145,6 +263,29 @@ export default function Home() {
     void loadLayout(configuration);
   }
 
+  function addCurrentWafer() {
+    if (!layout || layout.shots.length === 0 || !nextWaferName.trim()) {
+      return;
+    }
+
+    const failingCoordinates = Array.from(failingShots, (coordinate) => {
+      const [shot_x, shot_y] = coordinate.split(",").map(Number);
+      return { shot_x, shot_y };
+    });
+    const nextCount = waferRecords.length + 2;
+    setWaferRecords((current) => [
+      ...current,
+      {
+        wafer_id: crypto.randomUUID(),
+        name: nextWaferName.trim(),
+        layout,
+        failing_shots: failingCoordinates,
+        prediction: prediction ?? undefined,
+      },
+    ]);
+    setNextWaferName(`Wafer ${nextCount}`);
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -156,17 +297,19 @@ export default function Home() {
         </Link>
         <div className="topbar-meta">
           <span className="status-dot" />
-          <span>LAYOUT WORKSPACE</span>
-          <span className="phase-tag">PHASE 03</span>
+          <span>WAFER ANALYSIS</span>
         </div>
+        <Link className="topbar-guide-link" href="/guide">
+          User guide
+        </Link>
       </header>
 
       <section className="page-heading">
         <div>
-          <p className="eyebrow">ENGINEERING / WAFER SETUP</p>
-          <h1>Wafer layout</h1>
+          <p className="eyebrow">WAFER SETUP</p>
+          <h1>Wafer analysis</h1>
           <p className="page-description">
-            Configure wafer geometry, then mark failing shots directly on the map.
+            Set up a wafer, mark failing dies, and review its performance.
           </p>
         </div>
         <div className="unit-badge">
@@ -179,10 +322,9 @@ export default function Home() {
         <aside className="configuration-panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">01 / PARAMETERS</p>
+              <p className="eyebrow">GEOMETRY</p>
               <h2>Geometry</h2>
             </div>
-            <span className="panel-index">01</span>
           </div>
           <form onSubmit={handleSubmit}>
             <div className="field-grid">
@@ -222,8 +364,8 @@ export default function Home() {
               </select>
             </label>
             <div className="form-footnote">
-              Shot grid is aligned to the wafer coordinate origin. Offsets shift
-              the complete grid before edge filtering.
+              Die positions are centered on the wafer. Offsets shift the grid
+              before edge exclusion is applied.
             </div>
             <button className="primary-button" type="submit" disabled={isLoading}>
               <span>{isLoading ? "Calculating layout…" : "Generate layout"}</span>
@@ -235,7 +377,7 @@ export default function Home() {
               <strong>Layout unavailable</strong>
               <span>{error}</span>
               <span className="error-hint">
-                Confirm the FastAPI service is running at localhost:8000.
+                Please try again. If the problem continues, contact support.
               </span>
             </div>
           )}
@@ -244,11 +386,114 @@ export default function Home() {
         <section className="map-panel" aria-label="Wafer layout view">
           <div className="panel-heading map-heading">
             <div>
-              <p className="eyebrow">02 / INTERACTIVE MAP</p>
-              <h2>Shot distribution</h2>
+              <p className="eyebrow">WAFER MAP</p>
+              <h2>Die distribution</h2>
             </div>
-            <span className="map-coordinate">ORIGIN 0, 0</span>
+            <div className="map-heading-actions">
+              <input
+                className="wafer-name-input"
+                aria-label="Name for wafer to add"
+                value={nextWaferName}
+                onChange={(event) => setNextWaferName(event.target.value)}
+                maxLength={100}
+                disabled={!layout}
+              />
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={addCurrentWafer}
+                disabled={
+                  !layout ||
+                  layout.shots.length === 0 ||
+                  !nextWaferName.trim()
+                }
+              >
+                Add wafer
+              </button>
+              <label className="failure-rate-control">
+                <span>Failure rate</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={randomFailurePercent}
+                  onChange={(event) =>
+                    setRandomFailurePercent(Number(event.target.value))
+                  }
+                  aria-label="Random failure rate"
+                  aria-valuetext={`${randomFailurePercent}% of valid dies`}
+                  disabled={!layout || layout.shots.length === 0}
+                />
+                <output>{randomFailurePercent}%</output>
+              </label>
+              <button
+                className="secondary-button randomize-button"
+                type="button"
+                onClick={generateRandomFailures}
+                disabled={!layout || layout.shots.length === 0}
+              >
+                Generate random failures
+              </button>
+              <span className="map-coordinate">ORIGIN 0, 0</span>
+            </div>
           </div>
+
+          {layout && (
+            <section className="current-metrics-bar" aria-label="Current wafer analysis">
+              <div className="analysis-title">
+                <span className="eyebrow">CURRENT WAFER</span>
+                <strong>Observed failures</strong>
+              </div>
+              <div className="analysis-stat">
+                <span>VALID DIES</span>
+                <strong>{formatNumber(layout.total_valid_shots)}</strong>
+              </div>
+              <div className="analysis-stat">
+                <span>FAILING DIES</span>
+                <strong className="failure-count">{formatNumber(failingShots.size)}</strong>
+              </div>
+              <div className="analysis-stat">
+                <span>YIELD</span>
+                <strong>{metrics ? formatPercent(metrics.yield_fraction) : "—"}</strong>
+              </div>
+              <div className="analysis-stat">
+                <span>D0 · DEFECTS / cm²</span>
+                <strong>
+                  {metrics
+                    ? formatDensity(metrics.d0_per_cm2)
+                    : metricsError
+                      ? "Error"
+                      : isMetricsPending
+                        ? "Updating…"
+                        : "—"}
+                </strong>
+              </div>
+              <button
+                className="clear-button"
+                type="button"
+                onClick={() => {
+                  predictionRequestId.current += 1;
+                  setIsPredicting(false);
+                  setFailingShots(new Set());
+                  setMetrics(null);
+                  setMetricsError(null);
+                  setIsMetricsPending(Boolean(layout));
+                  setPrediction(null);
+                  setInferenceError(null);
+                }}
+                disabled={failingShots.size === 0}
+              >
+                Clear selection
+              </button>
+            </section>
+          )}
+          {metricsError && (
+            <div className="metrics-error" role="alert">
+              <strong>Metrics unavailable</strong>
+              <span>{metricsError}</span>
+            </div>
+          )}
 
           {layout ? (
             <>
@@ -276,12 +521,12 @@ export default function Home() {
                 )}
               </div>
               <div className="map-legend" aria-label="Map legend">
-                <span><i className="legend-swatch normal" /> Valid shot</span>
+                <span><i className="legend-swatch normal" /> Passing die</span>
                 <span><i className="legend-swatch failing" /> Marked failing</span>
                 <span><i className="legend-ring" /> Edge exclusion</span>
               </div>
               <div className="map-instruction">
-                SELECT A SHOT TO TOGGLE ITS FAILING STATE
+                Select dies on the map to mark or clear failures
               </div>
             </>
           ) : (
@@ -290,7 +535,7 @@ export default function Home() {
               <strong>{isLoading ? "Generating geometry" : "No layout generated"}</strong>
               <span>
                 {isLoading
-                  ? "Evaluating shot corners against the usable wafer boundary."
+                  ? "Checking die positions against the wafer boundary."
                   : "Set geometry parameters and generate a wafer layout to begin."}
               </span>
             </div>
@@ -299,17 +544,13 @@ export default function Home() {
             <section className="classification-panel" aria-label="Wafer classification">
               <div className="classification-heading">
                 <div>
-                  <p className="eyebrow">03 / CNN EXPLAINABILITY</p>
+                  <p className="eyebrow">CLASSIFICATION</p>
                   <h3>Defect pattern</h3>
                 </div>
-                <span className="classification-input-note">
-                  CATEGORICAL MAP → 26 × 26
-                </span>
               </div>
               <p className="classification-description">
-                Classify the current shot pattern. Valid unmarked shots are
-                passing (1), marked shots are failing (2), and wafer-background
-                cells are 0.
+                Run the trained classifier to find the defect signature that
+                best matches the selected failure pattern.
               </p>
               <button
                 className="primary-button classify-button"
@@ -331,9 +572,8 @@ export default function Home() {
               {prediction && (
                 <div className="prediction-result" aria-live="polite">
                   <p className="gradcam-description">
-                    Grad-CAM highlights the spatial regions that most
-                    influenced this prediction and is shown beside the wafer
-                    layout.
+                    The heatmap highlights the regions that most influenced
+                    this prediction.
                   </p>
                   <div className="prediction-summary">
                     <div>
@@ -342,7 +582,7 @@ export default function Home() {
                     </div>
                     <div>
                       <span>CONFIDENCE</span>
-                      <strong>{formatPercent(prediction.confidence)}</strong>
+                      <strong>{formatConfidence(prediction.confidence)}</strong>
                     </div>
                   </div>
                   <div className="probability-list" aria-label="Class probabilities">
@@ -363,7 +603,7 @@ export default function Home() {
                               style={{ width: `${probability * 100}%` }}
                             />
                           </div>
-                          <strong>{formatPercent(probability)}</strong>
+                          <strong>{formatConfidence(probability)}</strong>
                         </div>
                       ))}
                   </div>
@@ -374,41 +614,15 @@ export default function Home() {
         </section>
       </section>
 
-      <footer className="analysis-strip">
-        <div className="analysis-title">
-          <span className="eyebrow">03 / SELECTION</span>
-          <strong>Observed failures</strong>
-        </div>
-        <div className="analysis-stat">
-          <span>VALID SHOTS</span>
-          <strong>{layout ? formatNumber(layout.total_valid_shots) : "—"}</strong>
-        </div>
-        <div className="analysis-stat">
-          <span>MARKED FAILING</span>
-          <strong className="failure-count">{formatNumber(failingShots.size)}</strong>
-        </div>
-        <div className="analysis-stat">
-          <span>NORMAL</span>
-          <strong>{layout ? formatNumber(layout.total_valid_shots - failingShots.size) : "—"}</strong>
-        </div>
-        <button
-          className="clear-button"
-          type="button"
-          onClick={() => {
-            predictionRequestId.current += 1;
-            setIsPredicting(false);
-            setFailingShots(new Set());
-            setPrediction(null);
-            setInferenceError(null);
-          }}
-          disabled={failingShots.size === 0}
-        >
-          Clear selection
-        </button>
-      </footer>
-      <p className="phase-note">
-        For this phase, each valid UCS shot is treated as one classifier map cell.
-      </p>
+      <WaferAnalytics
+        wafers={waferRecords}
+        onRemoveWafer={(waferId) =>
+          setWaferRecords((current) =>
+            current.filter((wafer) => wafer.wafer_id !== waferId),
+          )
+        }
+      />
+
     </main>
   );
 }
