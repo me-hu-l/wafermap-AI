@@ -11,11 +11,11 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 10001 app
 
-COPY backend/requirements.txt ./requirements.txt
+COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-COPY --chown=app:app backend/app ./app
+COPY --chown=app:app app ./app
 
 USER app
 
