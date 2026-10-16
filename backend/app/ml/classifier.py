@@ -73,7 +73,7 @@ def configured_model_path() -> Path:
         )
 
     try:
-        checkpoint_path = hf_hub_download(repo_id=repo_id, filename=filename)
+        checkpoint_path = hf_hub_download(repo_id=repo_id, filename=filename, cache_dir="/tmp/huggingface_cache")
     except (HfHubHTTPError, HFValidationError, OSError) as error:
         raise ModelUnavailableError(
             f"Unable to download model file {filename!r} from Hugging Face "

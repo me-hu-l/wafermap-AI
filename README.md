@@ -46,10 +46,38 @@ FILENAME=plain_cnn_classifier_v1.pth
 
 The backend downloads the checkpoint with `huggingface_hub` and loads it at
 startup. For a private repository, configure the `HF_TOKEN` environment
-variable with a read-access token. If both `REPO_ID` and `FILENAME` are unset,
-the backend uses the bundled
+variable with a read-access token. When run from the repository, if both
+`REPO_ID` and `FILENAME` are unset, the backend uses the local
 `models/plain_cnn_classifier_v1.pth` checkpoint. Configure both Hugging Face
-variables together; setting only one is a startup error.
+variables together; setting only one is a startup error. The Docker image
+does not include this local checkpoint, so set both variables when using it.
+
+### Run the backend with Docker
+
+Build from the repository root:
+
+```sh
+docker build -f backend/Dockerfile -t wafermap-api .
+```
+
+The image downloads the model from Hugging Face during application startup.
+Set both model variables when deploying to Cloud Run; provide `HF_TOKEN` as a
+Secret Manager-backed environment variable when the model repository is
+private. Do not bake the token or model checkpoint into the image. Cloud Run
+provides `PORT`; the container listens on that port (defaulting to `8080` for
+local runs).
+
+```sh
+docker run --rm -p 8080:8080 \
+  -e FRONTEND_URL=https://your-frontend.example.com \
+  -e REPO_ID=your-account/wafermap-classifier \
+  -e FILENAME=plain_cnn_classifier_v1.pth \
+  -e HF_TOKEN \
+  wafermap-api
+```
+
+For a public repository, omit `HF_TOKEN`. The service exposes `/api/health`
+for Cloud Run health probes.
 
 ## CNN wafer classification
 
